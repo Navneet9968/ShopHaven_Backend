@@ -6,7 +6,13 @@ const port = 8080;
 const productsRouter = require("./routes/Products");
 const brandsRouter = require("./routes/Brands");
 const categoriesRouter = require("./routes/Categories");
+const cors = require("cors");
 
+server.use(
+  cors({
+    exposedHeaders: ["X-Total-Count"]
+  })
+);
 server.use(express.json()); //to parse req.body from frontend
 server.use("/products", productsRouter.router);
 server.use("/brands", brandsRouter.router);
