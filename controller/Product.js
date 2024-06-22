@@ -14,9 +14,13 @@ exports.createProduct = async (req, res) => {
 exports.fetchAllProducts = async (req, res) => {
   //TODO : multiple filter (categroy and brand) and sort
   //here we need all query string
+  let conditionAdmin = {};
+  if (!req.query.admin) {
+    conditionAdmin.deleted = { $ne: true };
+  }
 
-  let query = Product.find({ deleted: { $ne: true } });
-  let totalProductsQuery = Product.find({ deleted: { $ne: true } });
+  let query = Product.find(conditionAdmin);
+  let totalProductsQuery = Product.find(conditionAdmin);
 
   if (req.query.category) {
     query = query.find({ category: req.query.category });
