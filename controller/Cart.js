@@ -22,7 +22,6 @@ exports.addToCart = async (req, res) => {
   }
 };
 
-
 exports.deleteFromCart = async (req, res) => {
   //this product we have to get from API body request
   const { id } = req.params;
@@ -34,14 +33,14 @@ exports.deleteFromCart = async (req, res) => {
   }
 };
 
-
 exports.updateCart = async (req, res) => {
   const { id } = req.params;
   try {
     const cart = await Cart.findByIdAndUpdate(id, req.body, {
       new: true,
     });
-    res.status(200).json(cart);
+    const result = await cart.populate("product");
+    res.status(200).json(result);
   } catch (err) {
     res.status(400).json(err);
   }
