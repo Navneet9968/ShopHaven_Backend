@@ -84,7 +84,7 @@ passport.use(
           }
           const token = jwt.sign(sanitizeUser(user), SECRET_KEY);
 
-          done(null, { token }); //this calls the serializeUser
+          done(null, { id: user.id, role: user.role,token }); //this calls the serializeUser
         }
       );
     } catch (err) {
@@ -97,7 +97,7 @@ passport.use(
 passport.use(
   "jwt",
   new JwtStrategy(opts, async function (jwt_payload, done) {
-    console.log("jwt_payload", { jwt_payload });
+    console.log( { jwt_payload });
     try {
       const user = await User.findById(jwt_payload.id);
       if (user) {
