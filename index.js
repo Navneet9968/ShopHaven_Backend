@@ -1,8 +1,9 @@
+require("dotenv").config();
 const express = require("express");
 const server = express();
 const mongoose = require("mongoose");
 const { createProduct } = require("./controller/Product");
-const port = 8080;
+const port = process.env.PORT;
 const cors = require("cors");
 const session = require("express-session");
 const passport = require("passport");
@@ -23,23 +24,61 @@ const cartRouter = require("./routes/Cart");
 const ordersRouter = require("./routes/Orders");
 const { User } = require("./model/User");
 const { isAuth, sanitizeUser, cookieExtractor } = require("./services/common");
-const SECRET_KEY = "SECRET_KEY";
+const { env } = require("process");
+const path = require("path");
+
+//Webhook
+
+//Todo: It is working locally on dummy data, we will capture actual order after deploying live
+const endpointSecret = process.env.ENDPOINT_SECRET;
+
+server.post(
+  "/webhook",
+  express.raw({ type: "application/json" }),
+  (request, response) => {
+    const sig = request.headers["stripe-signature"];
+
+    let event;
+
+    try {
+      event = stripe.webhooks.constructEvent(request.body, sig, endpointSecret);
+    } catch (err) {
+      response.status(400).send(`Webhook Error: ${err.message}`);
+      return;
+    }
+
+    // Handle the event
+    switch (event.type) {
+      case "payment_intent.succeeded":
+        const paymentIntentSucceeded = event.data.object;
+        // Then define and call a function to handle the event payment_intent.succeeded
+        break;
+      // ... handle other event types
+      default:
+        console.log(`Unhandled event type ${event.type}`);
+    }
+
+    // Return a 200 response to acknowledge receipt of the event
+    response.send();
+  }
+);
 
 //JWT Options
-var opts = {};
+const opts = {};
 opts.jwtFromRequest = cookieExtractor;
-opts.secretOrKey = SECRET_KEY; //TODO: make this in env file
+opts.secretOrKey = process.env.JWT_SECRET_KEY; //TODO: make this in env file
 
 //middlewares
-server.use(express.static("build"));
+server.use(express.static(path.resolve(__dirname, "build")));
 server.use(cookieParser());
 server.use(
   session({
-    secret: "keyboard cat",
+    secret: process.env.SESSION_KEY,
     resave: false, // don't save session if unmodified
     saveUninitialized: false, // don't create session until something stored
   })
 );
+
 server.use(passport.authenticate("session"));
 
 server.use(
@@ -47,7 +86,9 @@ server.use(
     exposedHeaders: ["X-Total-Count"],
   })
 );
+
 server.use(express.json()); //to parse req.body from frontend
+
 server.use("/products", isAuth(), productsRouter.router);
 server.use("/brands", isAuth(), brandsRouter.router);
 server.use("/categories", isAuth(), categoriesRouter.router);
@@ -82,9 +123,12 @@ passport.use(
           if (!crypto.timingSafeEqual(user.password, hashedPassword)) {
             return done(null, false, { message: "Invalid credentials" });
           }
-          const token = jwt.sign(sanitizeUser(user), SECRET_KEY);
+          const token = jwt.sign(
+            sanitizeUser(user),
+            process.env.JWT_SECRET_KEY
+          );
 
-          done(null, { id: user.id, role: user.role,token }); //this calls the serializeUser
+          done(null, { id: user.id, role: user.role, token }); //this calls the serializeUser
         }
       );
     } catch (err) {
@@ -97,7 +141,7 @@ passport.use(
 passport.use(
   "jwt",
   new JwtStrategy(opts, async function (jwt_payload, done) {
-    console.log( { jwt_payload });
+    console.log({ jwt_payload });
     try {
       const user = await User.findById(jwt_payload.id);
       if (user) {
@@ -126,15 +170,34 @@ passport.deserializeUser(function (user, cb) {
   });
 });
 
+//Payments
+
+// This is your test secret API key.
+const stripe = require("stripe")(process.env.STRIPE_SERVER_KEY);
+
+server.post("/create-payment-intent", async (req, res) => {
+  const { totalAmount } = req.body;
+
+  // Create a PaymentIntent with the order amount and currency
+  const paymentIntent = await stripe.paymentIntents.create({
+    amount: totalAmount * 100, //multiplication with 100 for decimal conversion
+    currency: "usd",
+    // In the latest version of the API, specifying the `automatic_payment_methods` parameter is optional because Stripe enables its functionality by default.
+    automatic_payment_methods: {
+      enabled: true,
+    },
+  });
+
+  res.send({
+    clientSecret: paymentIntent.client_secret,
+  });
+});
+
 main().catch((err) => console.log(err));
 async function main() {
-  await mongoose.connect("mongodb://127.0.0.1:27017/ecommerce");
+  await mongoose.connect(process.env.MONGODB_URL);
   console.log("Connected to MongoDB");
 }
-
-server.get("/", (req, res) => {
-  res.json({ status: "Hello Customer!" });
-});
 
 server.listen(port, () => {
   console.log(`Example server listening at http://localhost:${port}`);
